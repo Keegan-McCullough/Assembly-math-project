@@ -1,0 +1,248 @@
+# This assembly code shows how to use the stack in Y86. The
+# code reads "input" from an array and stores "output" in a
+# second array. When the input is even, rf is called to
+# recursively multiply 1 or 2 to result until all values used, 
+# notibely there are two recursive calls. If the input is odd,
+# mult is called to multiply the inserted value by itself (square).
+# Before it checks for odd or even it goes to a function to find 
+# the absolute value of num and uses that value for the functions.
+# Ultimately the code terminates when num is zero.
+
+.pos 0x0
+
+main: 
+   irmovl stack,   %esp    # set stack ptr
+   irmovl input,   %esi    # input
+   irmovl output,  %edi    # output
+
+   mrmovl (%esi),  %ecx    # %ecx holds values from input (num)
+
+mainloop:
+   irmovl $0,      %edx    # get ready to test value for 0
+   addl   %ecx,    %edx    # add just to set condition codes
+   je     end              # val == 0, so we're done
+
+   pushl  %ecx             # save value (don't need to save %edx)
+   pushl  %ecx             # push argument n
+
+   call   abs            
+
+   popl   %ecx             # pop argument
+   popl   %ecx             # restore value
+   
+   irmovl $1,      %edx    # get ready to test value for odd
+   andl   %eax,    %edx    # if lsb bit is 1, value is odd
+   je     even             # otherwise odd
+
+odd:
+   rrmovl %eax,   %edx     # moving from return register to a register to hold
+   
+   pushl  %edx             # save value (don't need to save %edx)
+   pushl  %edx             # push argument abs_num
+   pushl  %edx             # push argument abs_num again
+
+   call   mult
+
+   popl   %edx             # pop argument
+   popl   %edx             # restore value
+   popl   %edx             # restore stack pointer
+
+   jmp    endloop
+   
+even:
+   rrmovl %eax,   %edx     # moving from return register to a register to hold
+   
+   pushl  %edx             # save value (don't need to save %edx)
+   pushl  %edx             # push argument abs_num
+
+   call   rf
+   
+   popl  %edx              # pop argument
+   popl  %edx              # restore value
+    
+endloop:
+   rmmovl %ecx,    (%edi)  # store value in output
+
+   irmovl $4,      %edx    # get ready to set next address in output
+   addl   %edx,    %edi    # set new output address
+
+   rmmovl %eax,    (%edi)  # store return value from mult2/mult3 in output
+
+   addl   %edx,    %esi    # set new input address
+   addl   %edx,    %edi    # set new output address
+
+   mrmovl (%esi),  %ecx    # set %ecx to next input value (x)
+
+   jmp    mainloop
+   
+end:
+   halt
+
+
+abs: 
+   pushl  %ebp             # prologue
+   rrmovl %esp,    %ebp
+
+   pushl  %edi             # save %edi value -- we're going to use it
+
+   mrmovl 8(%ebp), %edi    # return value = param (n)
+   irmovl $0,      %eax    # getting ready to see if the value is negative
+   addl   %edi,    %eax    # return value in %eax
+   
+   jge    L1
+   
+   irmovl $0,      %eax  # Set maximum negative number to %eax
+   subl   %edi,    %eax  # %eax = %eax - %edi
+   
+L1:
+   popl   %edi             # restore value
+   popl   %ebp             # epilogue
+   ret
+
+mult: 
+   pushl  %ebp             # prologue
+   rrmovl %esp,    %ebp
+
+   pushl  %edi             # save %edi value -- we're going to use it
+   pushl  %esi             # save %edi value -- we're going to use it
+   pushl  %ebx             # save %ebx value -- we're going to use it
+
+   mrmovl 8(%ebp), %edi    # ret = param (y)
+   mrmovl 12(%ebp),%esi    # ret = param (x)
+   
+   irmovl $0,      %ebx    # result = 0
+
+   irmovl $1,      %eax    # %eax = 1
+   subl   %eax,    %esi    # %esi = %esi - %eax
+   jg     add
+   
+add:
+   
+   addl   %edi,    %ebx    # %ebx = %ebx + %edi
+   
+   irmovl $1,      %eax    # %eax = 1
+   subl   %eax,    %esi    # %esi = %esi - %eax
+   jge    add
+
+   rrmovl %ebx,    %eax    # %eax = %ebx
+
+   popl   %ebx             # restore value
+   popl   %esi             # restore value
+   popl   %edi             # restore value
+   
+   popl   %ebp             # epilogue
+   ret
+
+rf:
+   pushl  %ebp             # prologue
+   rrmovl %esp,    %ebp
+
+   pushl  %edi             # save %edi value -- we're going to use it
+   pushl  %esi             # save %edi value -- we're going to use it
+   pushl  %ebx             # save %ebx value -- we're going to use it
+
+   mrmovl 8(%ebp), %edi    # ret = param(num)
+   irmovl $0,      %edx    # result
+recur:
+   irmovl $1,      %ebx    # %ebx = 1
+   
+   rrmovl %edi,    %esi    # getting ready to increment %edi by -1
+   subl   %ebx,    %esi    # %esi = %esi - %ebx
+   
+   je     Base_2           
+   jl     Base_1
+   jmp    L2
+
+Base_1:    
+   irmovl $1,      %esi    # %esi = 1
+   pushl  %esi             # return 1
+   jmp    Multiply
+   
+Base_2:
+   irmovl $2,      %esi    # %esi = 2
+   pushl  %esi             # return 2
+   jmp    Multiply
+
+L2:
+   pushl %edi              # returning the current n
+   irmovl $1,      %ebx    # preparing to iterate -1
+   subl   %ebx,    %edi    # rf(n-1)
+  
+   jmp   recur
+   
+L3:
+   irmovl $2,      %ebx   # preparing to iterate -2
+   subl   %ebx,    %edi   # rf(n-1)
+   
+   jmp   recur
+   
+Multiply:
+   popl   %esi            # pop the return value 1 or 2
+   
+   rrmovl %edx,    %ebx   # moving %edx value to protect it when comparing
+   irmovl $0,      %eax   # %eax = 0
+   subl   %ebx,    %eax   # checking to see if its the first instance of multiplication
+   jl     first
+
+   irmovl $1,      %ebx   # %ebx = 1
+   
+first:
+   rrmovl %esi,    %eax   # protect the return value
+   subl   %ebx,    %eax   # %eax = %eax - %ebx
+   
+   jg   high
+   
+   rrmovl %esi,    %eax   # fixes %eax back to the return value
+   
+   irmovl $0,      %edx   # result = 0
+   jmp   low
+   
+high:
+   irmovl $1,      %eax  # preparing itering by -1
+   subl   %eax,    %ebx  # %ebx = %ebx - %eax
+   jl     Rec_end
+   
+   addl   %esi,    %edx  # multiplication by addition
+    
+   jmp    high
+   
+low:
+   irmovl $1,      %esi # preparing itering by -1
+   subl   %esi,    %eax # %eax = %eax - %esi
+   jl     Rec_end
+   
+   addl   %ebx,    %edx # multiplication by addition
+    
+   jmp    low
+
+Rec_end:
+
+   popl   %edi          # pop the last value of n
+   irmovl $0,      %eax # checking if %edi is 0 (all values used)
+   subl   %edi,    %eax # %eax = %eax - %edi
+   
+   jne    L3
+    
+   rrmovl %edx,    %eax # setting the return value
+   rrmovl %edi,    %ebx # restore value
+   
+   popl   %esi          # restore value
+   popl   %edi          # restore value
+   
+   popl   %ebp             # epilogue
+   ret
+   
+.align 4
+
+input:
+.long -6
+.long 4
+.long 5
+.long -7
+.long 8
+.long 0
+
+output:
+
+.pos 0x400
+stack:
